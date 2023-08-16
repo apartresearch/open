@@ -1,0 +1,204 @@
+---
+title: Open data for Apart Research
+author: Esben Kran
+---
+
+```{r}
+pacman::p_load(tidyverse, ggplot2, googlesheets4, httr, dplyr, jsonlite)
+gs4_auth()
+
+aj_hacks = c("Safety Benchmarks", "Interpretability", "Evals", "Distillation", "Democratic Input", "ARENA Interpretability", "Agency", "Verification")
+```
+
+## Get information about the collection items
+
+We cannot get information about how many items are in a Collection, which is pretty horrible for any development purposes.
+
+```{r Collect signup data}
+url <- "https://api.webflow.com/collections/645a49db9870f22556453f00/items"
+items = 360
+responses <- list()
+
+for(i in seq(0, items, by = 100)) {
+  print(i)
+  queryString <- list(offset = i)
+  
+  response <- GET(url, 
+                  query = queryString, 
+                  add_headers(Authorization = 'Bearer e6e481ba4b96884d53f1e65d608c22673e4ef23e3adbf05ca30eec71e848493a', 
+                              'Content-Type' = "application/octet-stream", 
+                              Accept = "application/json"))
+  
+  responses[[length(responses) + 1]] <- content(response, "text")
+}
+
+rm(signups_df)
+for(r in responses) {
+    # Given JSON string
+  json_string <- r
+  
+  # Parse the JSON string
+  json_data <- fromJSON(json_string)
+  
+  # Convert the list to a data frame
+  if(!exists("signups_df") || nrow(signups_df) == 0){ signups_df <- as.data.frame(json_data$items)}
+  else {signups_df <- rbind(signups_df, as.data.frame(json_data$items))}
+}
+```
+
+
+```{r Summarise data}
+# Fix some typing
+signups_df <- signups_df %>% mutate(
+  hackathon = as.factor(hackathon),
+  is_interp = if_else(hackathon=="Interpretability", TRUE, FALSE)
+)
+theme_dark = theme_minimal() +
+  theme(
+    legend.position = "none",
+    panel.background = element_rect(fill = "black"),
+    plot.background = element_rect(fill = "black"),
+    axis.text = element_text(color = "white"),
+    axis.ticks = element_line(color = "white"),
+    text = element_text(color = "white"),
+    panel.grid.major = element_line(color = "gray30"),
+    panel.grid.minor = element_line(color = "gray40")
+  )
+
+signups_df %>% 
+  filter(hackathon != "Benchmarks") %>% 
+  group_by(hackathon) %>% 
+  summarise(n = n()) %>% 
+  ggplot() +
+  aes(n, hackathon, fill = hackathon, label = n) +
+  geom_col() +
+  labs(y = "Hackathon", x = "Signups", title = "Signups by research hackathon", subtitle = "Only for hackathons run on the Alignment Jam website") +
+  geom_text(hjust = 1.2, color = "#DDDDFF", size=3) +
+  theme_dark +
+  scale_fill_manual(values = c("#648FFF", "#5A7EED", "#4C6EDD", "#3E5ECC", "#3150BC", "#253FAB", "#192E9A", "#0C1D89", "#001078")) +
+  coord_cartesian(expand = FALSE)
+
+ggsave("signups.png", height = 4, width = 7)
+
+```
+
+```{r Collect projects data}
+url <- "https://api.webflow.com/collections/634eb78908836e79d5179c8b/items"
+items = 170
+responses <- list()
+
+for(i in seq(0, items, by = 100)) {
+  print(i)
+  queryString <- list(offset = i)
+  
+  response <- GET(url, 
+                  query = queryString, 
+                  add_headers(Authorization = 'Bearer e6e481ba4b96884d53f1e65d608c22673e4ef23e3adbf05ca30eec71e848493a', 
+                              'Content-Type' = "application/octet-stream", 
+                              Accept = "application/json"))
+  
+  responses[[length(responses) + 1]] <- content(response, "text")
+}
+
+df_list <- c()
+
+for(r in responses) {
+    # Given JSON string
+    json_string <- r
+  
+    # Parse the JSON string
+    json_data <- fromJSON(json_string)
+  
+    # Convert the list to a data frame
+    new_df <- as.data.frame(json_data$items)
+  
+    # Append the new data frame to the list
+    df_list[[length(df_list) + 1]] <- new_df
+}
+
+# Bind all data frames in the list together
+projects_df <- bind_rows(df_list)
+```
+
+```{r Projects data visualization}
+project_authors_df <- projects_df %>% 
+  filter(!is.na(`team-members`) && `team-members` != "test") %>%
+  separate_rows(`team-members`, sep = "[,;]\\s*|\\s*and\\s*") %>% 
+  filter(nchar(`team-members`) > 5)
+
+project_authors_df %>% 
+  filter(`hackathon-text` != "Benchmarks") %>% 
+  group_by(`hackathon-text`) %>% 
+  summarise(n = n()) %>% 
+  ggplot() +
+  aes(n, `hackathon-text`, fill = `hackathon-text`, label = n) +
+  geom_col() +
+  labs(y = "Hackathon", x = "Submitting participants", title = "Submissions by research hackathon", subtitle = "For hackathons both on external and proprietary platforms") +
+  geom_text(hjust = 1.2, color = "#DDDDFF", size=3) +
+  theme_dark +
+  scale_fill_manual(values = colorRampPalette(c("#648FFF", "#001078"))(12)) +
+  coord_cartesian(expand = FALSE)
+
+ggsave("submitting-participants.png", height = 4, width = 7)
+```
+
+## Survey responses
+
+```{r Collecting data from the survey data on GSheets}
+sheet_url <- "https://docs.google.com/spreadsheets/d/1WcxYxNTGThTtf81WsChoHYad6nzgPUToX-noCYzcUAE/edit?resourcekey#gid=993981135"
+survey_df <- read_sheet(sheet_url, sheet = "Form Responses 1")
+```
+
+```{r Renaming the columns}
+survey_df <- survey_df %>% 
+  rename(prior_know = `Prior knowledge
+How knowledgeable did you feel about AI safety before the hackathon?`, post_know = `Post knowledge
+How knowledgeable did you feel about AI safety after the hackathon?`,
+ prior_ais = `Prior likelihood of AI safety work
+How likely were you to work in a full-time AI safety role before participating (includes non-technical roles).`,
+post_ais = `Post likelihood of AI safety work
+How likely were you to work in a full-time AI safety role after participating (includes non-technical roles).`,
+attribution = `How much was the above attributed to participating in the hackathon?
+What is the chance that you would have attended or done this if you had not participated in the hackathon. E.g. 70% if you had a low chance of reading up on literature unless you were motivated by a hackathon.`,
+risk_est_delta = `How has your estimate of risk changed as a result of participating in the hackathon?
+Negative indicates that you are much more pessimistic about our ability to solve problems in AI risk. Positive indicates that you are much more optimistic about our ability to solve problems in AI risk. 5 is neutral.`,
+motivation_est_delta = `Do you feel more or less motivated for long-term engagement with AI safety?
+5 is neutral.`,
+age = `Age
+What is your age?`,
+education = `What is your highest level of education?
+Which degrees and education have you finished.`,
+counterfact_project = `Probability you would have done a project as impactful as this if not for the hackathon\nFrom -100% to +100% in 20% increments. 5 is 0%.  -100% means that you would have done a much more impactful project. This helps us understand if the hackathons actually help you develop better research.`,
+gender = `Gender
+What is your gender?`,
+ethnicity = `Ethnicity
+Which ethnic groups describe you? This helps us get an understanding of the diversity in our community.`,
+name = `Your name
+Again, for any follow-up information.`,
+discord = `Your Discord username
+This helps us get a headcount for how many on the server have responded.`,
+country_origin = `Which country are you from?
+We love to see the diversity of the community!`,
+country_participate = `Which country / state did you participate from?
+We love to see where folks joined from. If multiple, please separate them with a comma.`,
+email = `Email address
+This helps us with any follow-up and verification.`,
+network_score = `How likely are you to recommend joining the Alignment Jam hackathons to others?
+This helps us understand if you think our hackathons are good enough to promote to colleagues and friends!`,
+new_connections = `Networking and Collaboration
+What is the number of professional relationships formed during the hackathon, which could lead to future collaborations in AI safety?`,
+contribute_feel = `How well do you feel you can contribute to solving problems in AI risk after the hackathon vs. before the hackathon?
+5 is neutral.`
+)
+```
+
+
+```{r Analysing specific data}
+knowledge_msg <- sprintf("Difference in prior knowledge (%.2f) and posterior knowledge (%.2f) about AI safety: %.2f", 
+                   mean(survey_df$prior_know), 
+                   mean(survey_df$post_know), 
+                   mean(survey_df$post_know) - mean(survey_df$prior_know))
+
+print(knowledge_msg)
+```
+
