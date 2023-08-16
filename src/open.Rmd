@@ -78,7 +78,7 @@ signups_df %>%
   scale_fill_manual(values = c("#648FFF", "#5A7EED", "#4C6EDD", "#3E5ECC", "#3150BC", "#253FAB", "#192E9A", "#0C1D89", "#001078")) +
   coord_cartesian(expand = FALSE)
 
-ggsave("signups.png", height = 4, width = 7)
+ggsave("../img/signups.png", height = 4, width = 7)
 
 ```
 
@@ -139,7 +139,7 @@ project_authors_df %>%
   scale_fill_manual(values = colorRampPalette(c("#648FFF", "#001078"))(12)) +
   coord_cartesian(expand = FALSE)
 
-ggsave("submitting-participants.png", height = 4, width = 7)
+ggsave("../img/submitting-participants.png", height = 4, width = 7)
 ```
 
 ## Survey responses
