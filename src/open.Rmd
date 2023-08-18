@@ -7,6 +7,10 @@ author: Esben Kran
 pacman::p_load(tidyverse, ggplot2, googlesheets4, httr, dplyr, jsonlite)
 gs4_auth()
 
+readRenviron("~/Desktop/apart/tools/open/.Renviron")
+bearer_key <- Sys.getenv("BEARER_KEY")
+bearer_msg <- paste0("Bearer ", bearer_key)
+
 aj_hacks = c("Safety Benchmarks", "Interpretability", "Evals", "Distillation", "Democratic Input", "ARENA Interpretability", "Agency", "Verification")
 ```
 
@@ -25,14 +29,14 @@ for(i in seq(0, items, by = 100)) {
   
   response <- GET(url, 
                   query = queryString, 
-                  add_headers(Authorization = 'Bearer e6e481ba4b96884d53f1e65d608c22673e4ef23e3adbf05ca30eec71e848493a', 
+                  add_headers(Authorization = bearer_msg, 
                               'Content-Type' = "application/octet-stream", 
                               Accept = "application/json"))
   
   responses[[length(responses) + 1]] <- content(response, "text")
 }
 
-rm(signups_df)
+if(exists("signups_df")) { rm(signups_df) }
 for(r in responses) {
     # Given JSON string
   json_string <- r
@@ -44,6 +48,7 @@ for(r in responses) {
   if(!exists("signups_df") || nrow(signups_df) == 0){ signups_df <- as.data.frame(json_data$items)}
   else {signups_df <- rbind(signups_df, as.data.frame(json_data$items))}
 }
+
 ```
 
 
@@ -93,7 +98,7 @@ for(i in seq(0, items, by = 100)) {
   
   response <- GET(url, 
                   query = queryString, 
-                  add_headers(Authorization = 'Bearer e6e481ba4b96884d53f1e65d608c22673e4ef23e3adbf05ca30eec71e848493a', 
+                  add_headers(Authorization = bearer_msg, 
                               'Content-Type' = "application/octet-stream", 
                               Accept = "application/json"))
   
@@ -200,5 +205,25 @@ knowledge_msg <- sprintf("Difference in prior knowledge (%.2f) and posterior kno
                    mean(survey_df$post_know) - mean(survey_df$prior_know))
 
 print(knowledge_msg)
+
+ais_msg <- sprintf("Difference in self-reported AIS career probability before (%.2f) and after (%.2f): %.2f",
+                  mean(survey_df$prior_ais),
+                  mean(survey_df$post_ais),
+                  mean(survey_df$post_ais) - mean(survey_df$prior_ais))
+
+print(ais_msg)
+
+network_msg <- sprintf("Network score: %.2f",
+                  mean(survey_df$network_score))
+
+print(network_msg)
+
+countries_msg <- sprintf("Origin countries: %s\nParticipation countries: %s", stringi::stri_paste(survey_df$country_origin, collapse = ", "), stringi::stri_paste(survey_df$country_participate, collapse = ", "))
+
+print(countries_msg)
+
+counterfact_msg <- sprintf("Self-reported probability (-100%s to 100%s) that the person would have worked on a similarly impactful research project: %.2f%s", "%", "%", mean(survey_df$counterfact_project, na.rm = TRUE) / 5 * 100, "%")
+
+print(counterfact_msg)
 ```
 
