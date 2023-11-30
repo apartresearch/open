@@ -20,7 +20,7 @@ We cannot get information about how many items are in a Collection, which is pre
 
 ```{r Collect signup data}
 url <- "https://api.webflow.com/collections/645a49db9870f22556453f00/items"
-items = 360
+items = 701
 responses <- list()
 
 for(i in seq(0, items, by = 100)) {
@@ -84,12 +84,14 @@ signups_df %>%
   coord_cartesian(expand = FALSE)
 
 ggsave("../img/signups.png", height = 4, width = 7)
-
+signups_df %>% 
+  group_by(email) %>%
+  summarise()
 ```
 
 ```{r Collect projects data}
 url <- "https://api.webflow.com/collections/634eb78908836e79d5179c8b/items"
-items = 170
+items = 211
 responses <- list()
 
 for(i in seq(0, items, by = 100)) {
@@ -141,10 +143,31 @@ project_authors_df %>%
   labs(y = "Hackathon", x = "Submitting participants", title = "Submissions by research hackathon", subtitle = "For hackathons both on external and proprietary platforms") +
   geom_text(hjust = 1.2, color = "#DDDDFF", size=3) +
   theme_dark +
-  scale_fill_manual(values = colorRampPalette(c("#648FFF", "#001078"))(12)) +
+  scale_fill_manual(values = colorRampPalette(c("#648FFF", "#001078"))(16)) +
   coord_cartesian(expand = FALSE)
 
 ggsave("../img/submitting-participants.png", height = 4, width = 7)
+
+# Split the 'emails' column
+pacman::p_load(gender)
+projects_df %>% 
+  mutate(split_emails = str_trim(str_split(`team-email-addresses`, ",|;|-|&"))) %>% 
+  unnest(split_emails) %>% 
+  summarise(unique_count = n_distinct(split_emails))
+
+gender_df <- projects_df %>%
+  mutate(split_team_members = str_split(`team-members`, ",|;|-|&")) %>% 
+  unnest(split_team_members)
+
+gender_df <- gender_df %>%
+  mutate(first_name = as.character(lapply(split_team_members, function(s) str_split(str_trim(s), " ")[[1]][[1]])),  # Extract the first name from the full name
+         gender_prediction = lapply(first_name, function(f) gender(f)[1, "gender"]))  # Get the most likely gender
+
+gender_df %>% 
+  mutate(gender_prediction = as.character(gender_prediction)) %>% 
+  group_by(gender_prediction) %>% 
+  summarise(n())
+
 ```
 
 ## Survey responses
@@ -213,7 +236,7 @@ ais_msg <- sprintf("Difference in self-reported AIS career probability before (%
 
 print(ais_msg)
 
-network_msg <- sprintf("Network score: %.2f",
+network_msg <- sprintf("Promoter score (would you recommend this to a friend): %.2f",
                   mean(survey_df$network_score))
 
 print(network_msg)
@@ -222,8 +245,34 @@ countries_msg <- sprintf("Origin countries: %s\nParticipation countries: %s", st
 
 print(countries_msg)
 
-counterfact_msg <- sprintf("Self-reported probability (-100%s to 100%s) that the person would have worked on a similarly impactful research project: %.2f%s", "%", "%", mean(survey_df$counterfact_project, na.rm = TRUE) / 5 * 100, "%")
+counterfact_msg <- sprintf("Self-reported probability (-100%s to 100%s) that the participant would not have worked on a similarly impactful research project: %.2f%s. -100%s means they would have worked on a more impactful project otherwise while 0%s indicates they would have worked on something similarly impactful.", "%", "%", mean(survey_df$counterfact_project, na.rm = TRUE) / 5 * 100, "%", "%", "%")
 
 print(counterfact_msg)
+
+motivation_msg <- sprintf("Self-reported change in motivation to work on AI safety long-term (-5 to 5): %s", mean(survey_df$motivation_est_delta)-5)
+
+print(motivation_msg)
+```
+
+```{r}
+library(googlesheets4)
+library(dplyr)
+
+# Google Sheet URL
+sheet_url <- "https://docs.google.com/spreadsheets/d/1Xl_NS85DUoKhd8QT7qm5smnpkL02P0P6JMxHv8mG1Mc/edit#gid=0"
+
+# Read the Google Sheet into a dataframe
+df <- read_sheet(sheet_url, range = "Sheet1", n_max = Inf)
+
+# Assuming you're interested in the first three columns, let's subset the data.
+# Replace 'col1', 'col2', 'col3' with the actual column names from the Google Sheet.
+df_subset <- df %>% select(col1, col2, col3)
+
+# Calculate the median for each column
+median_values <- sapply(df_subset, median, na.rm = TRUE)
+
+# Print out the median values
+print(median_values)
+
 ```
 
